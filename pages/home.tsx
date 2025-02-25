@@ -28,12 +28,9 @@ export default function HomePage() {
     exportWallet: exportEvmWallet,
   } = usePrivy();
 
-  const { wallets: evmWallets, ready: evmReady } = useWallets();
-  const {
-    wallets: solanaWallets,
-    exportWallet: exportSolanaWallet,
-    ready: solanaReady,
-  } = useSolanaWallets();
+  const { wallets: evmWallets } = useWallets();
+  const { wallets: solanaWallets, exportWallet: exportSolanaWallet } =
+    useSolanaWallets();
 
   const { fundWallet: fundEvmWallet } = useFundEvmWallet();
   const { fundWallet: fundSolanaWallet } = useFundSolanaWallet();
