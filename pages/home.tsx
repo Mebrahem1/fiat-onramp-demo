@@ -35,8 +35,6 @@ export default function HomePage() {
     ready: solanaReady,
   } = useSolanaWallets();
 
-  console.log(solanaWallets);
-
   const { fundWallet: fundEvmWallet } = useFundEvmWallet();
   const { fundWallet: fundSolanaWallet } = useFundSolanaWallet();
 
