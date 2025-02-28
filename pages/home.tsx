@@ -1,10 +1,14 @@
-import axios from "axios";
 import { useRouter } from "next/router";
 import React, { useEffect, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import Head from "next/head";
 import OnrampModal from "../components/onramp";
 import { ethers } from "ethers";
+import { useFundWallet as useFundEvmWallet } from "@privy-io/react-auth";
+import { useFundWallet as useFundSolanaWallet } from "@privy-io/react-auth/solana";
+import { useWallets } from "@privy-io/react-auth";
+import { useSolanaWallets } from "@privy-io/react-auth/solana";
+import { mainnet } from "viem/chains";
 
 function formatAddress(address?: string | null) {
   if (!address) return "";
@@ -19,11 +23,17 @@ export default function HomePage() {
     authenticated,
     user,
     logout,
-    getAccessToken,
     signMessage,
     sendTransaction,
-    exportWallet,
+    exportWallet: exportEvmWallet,
   } = usePrivy();
+
+  const { wallets: evmWallets } = useWallets();
+  const { wallets: solanaWallets, exportWallet: exportSolanaWallet } =
+    useSolanaWallets();
+
+  const { fundWallet: fundEvmWallet } = useFundEvmWallet();
+  const { fundWallet: fundSolanaWallet } = useFundSolanaWallet();
 
   const router = useRouter();
   // Signature produced using `signMessage`
@@ -31,81 +41,63 @@ export default function HomePage() {
   // Fiat onramp URL returned from server
   const [onrampUrl, setOnrampUrl] = useState<string | null>(null);
   // Balance of embedded wallet
-  const [balance, setBalance] = useState<string | undefined>(undefined);
+  const [evmBalance, setEvmBalance] = useState<string | undefined>(undefined);
 
   // Method to get the user's Goerli ETH balance
-  const updateBalance = async () => {
+  const updateEvmBalance = async () => {
     if (!user?.wallet?.address) return;
     try {
       const ethersProvider = new ethers.InfuraProvider(
-        "goerli",
+        "mainnet",
         process.env.NEXT_PUBLIC_INFURA_API_KEY
       );
       const balanceInWei = await ethersProvider.getBalance(user.wallet.address);
-      setBalance(ethers.formatEther(balanceInWei));
+      setEvmBalance(ethers.formatEther(balanceInWei));
     } catch (error) {
       console.error(`Cannot connect to Infura with error: ${error}`);
     }
   };
 
   // Method to invoke fiat on-ramp flow for current user
-  const fundWallet = async () => {
+  const onFundEVMWallet = async () => {
     // Error if user does not have a wallet
-    if (!ready || !authenticated || !user?.wallet?.address) {
-      console.error("Unable to fund wallet.");
-      return;
+    if (!evmWallets.length) {
+      throw new Error("No EVM wallet found");
     }
 
-    // Get details about the current user's on-ramp flow
-    const walletAddress = user?.wallet?.address;
-    const emailAddress = user?.email?.address;
-    const redirectUrl = window.location.href;
-    const authToken = await getAccessToken();
+    const wallet = evmWallets[0];
 
-    // Get onramp URL from server
-    try {
-      const onrampResponse = await axios.post(
-        "/api/onramp",
-        {
-          address: walletAddress,
-          email: emailAddress,
-          redirectUrl: redirectUrl,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${authToken}`,
-          },
-        }
-      );
+    const fundingConfig = {
+      amount: "100",
+      asset: "USDC",
+      chain: mainnet,
+    };
 
-      // Open modal to kick off on-ramp flow
-      setOnrampUrl(onrampResponse.data.url as string);
-    } catch (error) {
-      console.error(error);
+    if (wallet?.address) {
+      await fundEvmWallet(wallet.address, fundingConfig);
     }
   };
 
-  async function deleteUser() {
-    const authToken = await getAccessToken();
-    try {
-      await axios.delete("/api/users/me", {
-        headers: {
-          Authorization: `Bearer ${authToken}`,
-        },
-      });
-    } catch (error) {
-      console.error(error);
+  const onFundSolanaWallet = async () => {
+    if (!solanaWallets.length) {
+      throw new Error("No Solana wallet found");
     }
-    logout();
-  }
+
+    const wallet = solanaWallets[0];
+
+    const fundingConfig = {
+      amount: "0.01",
+    };
+
+    if (wallet?.address) {
+      await fundSolanaWallet(wallet.address, fundingConfig);
+    }
+  };
 
   const onSign = async () => {
     try {
-      const signature = await signMessage("I hereby vote for foobar", {
-        title: "You are voting for foobar project",
-        description:
-          "Foobar project is so great you'll love it. Come on by and give us a vote today. Whooo hooo!",
-        buttonText: "Vote for foobar",
+      const { signature } = await signMessage({
+        message: "I hereby vote for foobar",
       });
       setSignature(signature);
     } catch (error) {
@@ -117,7 +109,7 @@ export default function HomePage() {
     try {
       const receipt = await sendTransaction({
         to: "0xFf8c476a67B2903e077b16CdB823710ea3D4BC7f",
-        chainId: 5,
+        chainId: mainnet.id,
         value: ethers.parseEther("0.00005"),
       });
       console.log("Transaction Receipt:", receipt);
@@ -130,7 +122,7 @@ export default function HomePage() {
     if (ready && !authenticated) {
       router.push("/");
     }
-    updateBalance();
+    updateEvmBalance();
   }, [ready, authenticated, router]);
 
   return (
@@ -146,12 +138,6 @@ export default function HomePage() {
             <div className="flex flex-row justify-between">
               <h1 className="text-2xl font-semibold">Fiat Onramp Demo</h1>
               <div className="flex flex-row gap-4">
-                <button
-                  onClick={deleteUser}
-                  className="rounded-md bg-violet-200 px-4 py-2 text-sm text-violet-700 hover:text-violet-900"
-                >
-                  Delete my data
-                </button>
                 <button
                   onClick={logout}
                   className="rounded-md bg-violet-200 px-4 py-2 text-sm text-violet-700 hover:text-violet-900"
@@ -195,35 +181,55 @@ export default function HomePage() {
                 )}
               </div>
               <div className="flex flex-col items-start gap-2 py-2">
-                <button
-                  onClick={fundWallet}
-                  className="rounded-md border-none bg-violet-600 px-4 py-2 text-sm text-white transition-all hover:bg-violet-700"
-                >
-                  Fund embedded wallet
-                </button>
+                {evmWallets.length > 0 && (
+                  <button
+                    onClick={onFundEVMWallet}
+                    className="rounded-md border-none bg-violet-600 px-4 py-2 text-sm text-white transition-all hover:bg-violet-700"
+                  >
+                    Fund EVM embedded wallet
+                  </button>
+                )}
+                {solanaWallets.length > 0 && (
+                  <button
+                    onClick={onFundSolanaWallet}
+                    className="rounded-md border-none bg-violet-600 px-4 py-2 text-sm text-white transition-all hover:bg-violet-700"
+                  >
+                    Fund Solana embedded wallet
+                  </button>
+                )}
               </div>
               <div className="flex flex-col items-start gap-2 py-2">
                 <button
                   onClick={onSend}
                   className="rounded-md border-none bg-violet-600 px-4 py-2 text-sm text-white transition-all hover:bg-violet-700"
                 >
-                  Send a transaction
+                  Send an EVM transaction
                 </button>
               </div>
               <div className="flex flex-col items-start gap-2 py-2">
-                <button
-                  onClick={exportWallet}
-                  className="rounded-md border-none bg-violet-600 px-4 py-2 text-sm text-white transition-all hover:bg-violet-700"
-                >
-                  Export embedded wallet
-                </button>
+                {evmWallets.length > 0 && (
+                  <button
+                    onClick={() => exportEvmWallet()}
+                    className="rounded-md border-none bg-violet-600 px-4 py-2 text-sm text-white transition-all hover:bg-violet-700"
+                  >
+                    Export embedded wallet
+                  </button>
+                )}
+                {solanaWallets.length > 0 && (
+                  <button
+                    onClick={() => exportSolanaWallet()}
+                    className="rounded-md border-none bg-violet-600 px-4 py-2 text-sm text-white transition-all hover:bg-violet-700"
+                  >
+                    Export solana wallet
+                  </button>
+                )}
               </div>
             </div>
 
             <p className="mt-6 text-sm font-bold uppercase text-gray-600">
               My balance
             </p>
-            <p>{balance} Goerli ETH</p>
+            <p>{evmBalance} ETH</p>
 
             <p className="mt-6 text-sm font-bold uppercase text-gray-600">
               User object

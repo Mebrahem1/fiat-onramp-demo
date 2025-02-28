@@ -2,15 +2,13 @@ import "../styles/globals.css";
 import type { AppProps } from "next/app";
 import Head from "next/head";
 import { PrivyProvider } from "@privy-io/react-auth";
-import { useRouter } from "next/router";
 import React from "react";
+import { mainnet } from "viem/chains";
 
 const privyLogo =
   "https://pub-dc971f65d0aa41d18c1839f8ab426dcb.r2.dev/privy.png";
 
 function MyApp({ Component, pageProps }: AppProps) {
-  const router = useRouter();
-
   return (
     <>
       <Head>
@@ -49,17 +47,20 @@ function MyApp({ Component, pageProps }: AppProps) {
       </Head>
       <PrivyProvider
         appId={process.env.NEXT_PUBLIC_PRIVY_APP_ID || ""}
-        onSuccess={() => {
-          router.push("/home");
-        }}
-        // @ts-ignore
-        apiUrl={process.env.NEXT_PUBLIC_PRIVY_AUTH_URL || ""}
         config={{
+          defaultChain: mainnet,
           appearance: {
             logo: privyLogo,
           },
+          embeddedWallets: {
+            solana: {
+              createOnLogin: "users-without-wallets",
+            },
+            ethereum: {
+              createOnLogin: "users-without-wallets",
+            },
+          },
         }}
-        createPrivyWalletOnLogin
       >
         <Component {...pageProps} />
       </PrivyProvider>
