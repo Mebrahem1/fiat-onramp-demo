@@ -1,4 +1,4 @@
-# Privy Fiat On-Ramp Demo
+# Privy Fiat On-Ramp Demow
 
 This is a demo of integrating [Privy](https://www.privy.io/) alongside a fiat on-ramp, [Moonpay](https://www.moonpay.com/). In this app, users can sign in with their email address, create an embedded wallet, and then _fund_ their embedded wallet on the Goerli testnet.
 
